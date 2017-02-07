@@ -10,9 +10,16 @@ class Factory
         switch($type) {
             case 'ssh' :
                 if ($port == null) {
-                    $port = SftpConnection::DEFAULT_PORT;
+                    $port = SftpConnection::getDefaultPort();
                 }
                 return new SftpConnection($username, $password, $hostname, $port);
+                break;
+
+            case 'ftp':
+                if ($port == null) {
+                    $port = FtpConnection::getDefaultPort();
+                }
+                return new FtpConnection($username, $password, $hostname, $port);
                 break;
         }
 
@@ -36,6 +43,11 @@ abstract class AbstractConnection
         $this->password = $password;
         $this->hostname = $hostname;
         $this->port = $port;
+    }
+
+    public static function getDefaultPort()
+    {
+        return self::DEFAULT_PORT;
     }
 
     abstract public function cd($path);
@@ -127,6 +139,87 @@ class SftpConnection extends AbstractConnection
     public function close()
     {
         $this->session = null;
+    }
+
+}
+
+class FtpConnection extends AbstractConnection
+{
+    const DEFAULT_PORT = 21;
+
+    function __construct($username, $password, $hostname, $port=self::DEFAULT_PORT)
+    {
+        parent::__construct($username, $password, $hostname, $port);
+
+        $this->session = ftp_connect($this->hostname, $this->port);
+        if ($this->session === False) {
+            throw new Exception(sprintf(
+                "Cannot connect to server %s, port %s",
+                $this->hostname,
+                $this->port
+            ));
+        }
+
+        if (!@ftp_login($this->session, $this->username, $this->password)) {
+            throw new Exception(sprintf(
+                "Cannot login as user %s, password %s",
+                $this->username,
+                $this->password
+            ));
+        }
+
+        ftp_pasv($this->session, True);
+    }
+
+    public function cd($path)
+    {
+        ftp_chdir($this->session, $path);
+        return $this;
+    }
+
+    public function pwd()
+    {
+        return ftp_pwd($this->session);
+    }
+
+    public function download($filename)
+    {
+        $local_path = getcwd().'/'.$filename;
+        $remote_path = $this->pwd().'/'.$filename;
+        if (!ftp_get($this->session, $filename, $filename, FTP_BINARY)) {
+            throw new Exception(
+                "Cannot download file %s, local path %s, remote path: %s",
+                 $filename,
+                 $local_path,
+                 $remote_path
+            );
+        }
+        return $this;
+    }
+
+    public function upload($filename)
+    {
+        $local_path = getcwd().'/'.$filename;
+        $remote_path = $this->pwd().'/'.$filename;
+        if (!ftp_put($this->session, $filename, $filename, FTP_BINARY)) {
+            throw new Exception(
+                "Cannot upload file %s, local path %s, remote path %s",
+                 $filename,
+                 $local_path,
+                 $remote_path
+            );
+        }
+        return $this;
+    }
+
+    public function exec($cmd)
+    {
+        return ftp_raw($this->session, $cmd);
+    }
+
+    public function close()
+    {
+        ftp_close($this->session);
     }
 
 }
