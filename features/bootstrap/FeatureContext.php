@@ -53,9 +53,9 @@ class FeatureContext implements Context
     }
 
     /**
-     * @When the user connects to the server
+     * @When the user connects to the server via SSH
      */
-    public function theUserConnectsToTheServer()
+    public function theUserConnectsToTheServerViaSsh()
     {
         $factory = new FT\Factory();
         $user_data = $this->testData['user_credentials'];
@@ -85,6 +85,43 @@ class FeatureContext implements Context
         PHPUnit_Framework_Assert::assertFileExists(
             self::TEST_FILENAME,
             'The requested file is downloaded'
+        );
+    }
+
+    /**
+     * @When the user connects to the server via FTP
+     */
+    public function theUserConnectsToTheServerViaFtp()
+    {
+        $factory = new FT\Factory();
+        $user_data = $this->testData['user_credentials'];
+        
+        $this->testData['session'] = $factory->getConnection('ftp',
+            $user_data['username'],
+            $user_data['password'],
+            $user_data['host']
+        );
+    }
+
+    /**
+     * @When initiates the file upload
+     */
+    public function initiatesTheFileUpload()
+    {
+        // Upload README.md to the remote server
+        $this->testData['session']->upload('README.md');
+    }
+
+    /**
+     * @Then a matching remote file must be created
+     */
+    public function aMatchingRemoteFileMustBeCreated()
+    {
+        // Now let's make sure we do have it in the list
+        $result = $this->testData['session']->exec('ls -1');
+        PHPUnit_Framework_Assert::assertTrue(
+            in_array('README.md', $result),
+            'Got the uploaded file'
         );
     }
 
