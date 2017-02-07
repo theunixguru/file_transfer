@@ -23,7 +23,7 @@ class Factory
                 break;
         }
 
-        throw new Exception('Please provide a connection type');
+        throw new \Exception('Please provide a connection type');
     }
 
 }
@@ -45,10 +45,7 @@ abstract class AbstractConnection
         $this->port = $port;
     }
 
-    public static function getDefaultPort()
-    {
-        return self::DEFAULT_PORT;
-    }
+    abstract public function getDefaultPort();
 
     abstract public function cd($path);
     abstract public function pwd();
@@ -74,17 +71,22 @@ class SftpConnection extends AbstractConnection
             null,
             [
                 'disconnect' => function ($code, $message) {
-                    throw new Exception($message, $code);
+                    throw new \Exception($message, $code);
                 }
             ]
         );
 
         if (!ssh2_auth_password($this->session, $this->username, $this->password)) {
-            throw new Exception(sprintf(
+            throw new \Exception(sprintf(
                 "Authentication failed for username %s, password %s",
                 $this->username, $this->password
             ));
         }
+    }
+
+    public function getDefaultPort()
+    {
+        return self::DEFAULT_PORT;
     }
 
     public function cd($path)
@@ -103,7 +105,7 @@ class SftpConnection extends AbstractConnection
         $local_path = getcwd().'/'.$filename;
         $remote_path = $this->pwd().'/'.$filename;
         if (!ssh2_scp_recv($this->session, $remote_path, $local_path)) {
-            throw new Exception(
+            throw new \Exception(
                 "Cannot download file %s, local path %s, remote path: %s",
                  $filename,
                  $local_path,
@@ -118,7 +120,7 @@ class SftpConnection extends AbstractConnection
         $local_path = getcwd().'/'.$filename;
         $remote_path = $this->pwd().'/'.$filename;
         if (!ssh_scp_send($this->session, $local_path, $remote_path)) {
-            throw new Exception(
+            throw new \Exception(
                 "Cannot upload file %s, local path %s, remote path %s",
                  $filename,
                  $local_path,
@@ -153,7 +155,7 @@ class FtpConnection extends AbstractConnection
 
         $this->session = ftp_connect($this->hostname, $this->port);
         if ($this->session === False) {
-            throw new Exception(sprintf(
+            throw new \Exception(sprintf(
                 "Cannot connect to server %s, port %s",
                 $this->hostname,
                 $this->port
@@ -161,7 +163,7 @@ class FtpConnection extends AbstractConnection
         }
 
         if (!@ftp_login($this->session, $this->username, $this->password)) {
-            throw new Exception(sprintf(
+            throw new \Exception(sprintf(
                 "Cannot login as user %s, password %s",
                 $this->username,
                 $this->password
@@ -169,6 +171,11 @@ class FtpConnection extends AbstractConnection
         }
 
         ftp_pasv($this->session, True);
+    }
+
+    public function getDefaultPort()
+    {
+        return self::DEFAULT_PORT;
     }
 
     public function cd($path)
@@ -186,35 +193,61 @@ class FtpConnection extends AbstractConnection
     {
         $local_path = getcwd().'/'.$filename;
         $remote_path = $this->pwd().'/'.$filename;
+
         if (!ftp_get($this->session, $filename, $filename, FTP_BINARY)) {
-            throw new Exception(
+            throw new \Exception(
                 "Cannot download file %s, local path %s, remote path: %s",
                  $filename,
                  $local_path,
                  $remote_path
             );
         }
+
         return $this;
     }
 
-    public function upload($filename)
+    public function upload($local_path)
     {
-        $local_path = getcwd().'/'.$filename;
+        $filename = basename($local_path);
         $remote_path = $this->pwd().'/'.$filename;
-        if (!ftp_put($this->session, $filename, $filename, FTP_BINARY)) {
-            throw new Exception(
+
+        if (!ftp_put($this->session, $filename, $local_path, FTP_BINARY)) {
+            throw new \Exception(
                 "Cannot upload file %s, local path %s, remote path %s",
                  $filename,
                  $local_path,
                  $remote_path
             );
         }
+
         return $this;
     }
 
     public function exec($cmd)
     {
-        return ftp_raw($this->session, $cmd);
+        $result = [];
+
+        $remote_tmpfile = 'output.txt';
+        if(!ftp_exec($this->session, "$cmd > $remote_tmpfile")) {
+            throw new \Exception("Cannot execute command '$cmd'.".
+                " Reason: SITE command not supported");
+        }
+
+        $local_tmpfile = tempnam(sys_get_temp_dir(), 'ft');
+        if (!ftp_get($this->session, $local_tmpfile, $remote_tmpfile, FTP_BINARY)) {
+            throw new \Exception(
+                "Cannot execute command '$cmd'. Reason: temporary file");
+        }
+        ftp_delete($this->session, $remote_tmpfile);
+
+        $fh = fopen($local_tmpfile, "r");
+        while ($line = fgets($fh)) {
+            $result[]= chop($line);
+        }
+        fclose($dh);
+        unlink($local_tmpfile);
+
+        return $result;
     }
 
     public function close()
