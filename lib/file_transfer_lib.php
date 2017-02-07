@@ -5,10 +5,13 @@ namespace FileTransfer;
 class Factory
 {
 
-    public static function getConnection($type, $username, $password, $hostname, $port)
+    public static function getConnection($type, $username, $password, $hostname, $port=null)
     {
         switch($type) {
             case 'ssh' :
+                if ($port == null) {
+                    $port = SftpConnection::DEFAULT_PORT;
+                }
                 return new SftpConnection($username, $password, $hostname, $port);
                 break;
         }
@@ -27,7 +30,7 @@ abstract class AbstractConnection
 
     protected $session;
 
-    public __construct($username, $password, $hostname, $port=null)
+    function __construct($username, $password, $hostname, $port=null)
     {
         $this->username = $username;
         $this->password = $password;
@@ -35,17 +38,8 @@ abstract class AbstractConnection
         $this->port = $port;
     }
 
-    public function cd($path)
-    {
-        $this->exec("cd $path");
-        return $this;
-    }
-
-    public function pwd()
-    {
-        return $this->exec("/bin/pwd");
-    }
-
+    abstract public function cd($path);
+    abstract public function pwd();
     abstract public function download($remote_file);
     abstract public function upload($local_file);
     abstract public function exec($cmd);
@@ -56,7 +50,9 @@ class SftpConnection extends AbstractConnection
 {
     const DEFAULT_PORT = 22;
 
-    public __construct($username, $password, $hostname, $port = DEFAULT_PORT)
+    protected $cwd;
+
+    function __construct($username, $password, $hostname, $port=self::DEFAULT_PORT)
     {
         parent::__construct($username, $password, $hostname, $port);
 
@@ -79,6 +75,17 @@ class SftpConnection extends AbstractConnection
         }
     }
 
+    public function cd($path)
+    {
+        $this->cwd = $path;
+        return $this;
+    }
+
+    public function pwd()
+    {
+        return $this->cwd;
+    }
+
     public function download($filename)
     {
         $local_path = getcwd().'/'.$filename;
@@ -96,7 +103,17 @@ class SftpConnection extends AbstractConnection
 
     public function upload($filename)
     {
-        // TODO
+        $local_path = getcwd().'/'.$filename;
+        $remote_path = $this->pwd().'/'.$filename;
+        if (!ssh_scp_send($this->session, $local_path, $remote_path)) {
+            throw new Exception(
+                "Cannot upload file %s, local path %s, remote path %s",
+                 $filename,
+                 $local_path,
+                 $remote_path
+            );
+        }
+        return $this;
     }
 
     public function exec($cmd)
