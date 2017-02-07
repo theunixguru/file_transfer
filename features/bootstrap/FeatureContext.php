@@ -46,9 +46,9 @@ class FeatureContext implements Context
     public function aUserHasValidUserCredentialsOnARemoteServer()
     {
         $this->testData['user_credentials'] = [
-            'username' => 'dennis',
-            'password' => '9!m8!yKG)N5sf\lk+CfH+b2N',
-            'host' => '192.168.56.12'
+            'username' => '<username>',
+            'password' => '<password>',
+            'host' => '<host>'
         ];
     }
 
